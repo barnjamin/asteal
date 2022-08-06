@@ -1,5 +1,11 @@
 import pyteal as pt 
 
+# Dumb program to write out python given a pyteal expression
+# might be helpful later going from python => pyteal
+
+# TODO: cant figure out how to get variable names
+
+
 def op_to_str(op: pt.Op):
     strop = str(op)
     match strop:
@@ -118,6 +124,7 @@ while x < 10:
     ),
 
 ]
+
 
 
 for prog in progs:
