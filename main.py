@@ -7,16 +7,18 @@ from c2c import approval, clear
 # Dumb program to write out python given a pyteal expression
 # might be helpful later going from python => pyteal
 
-# TODO: cant figure out how to get variable names
+# TODO: figure out how to get variable names
+# TODO: instead of returning a string, return the python AST elements
+# TODO: use IR instead of Exprs
 
-
-class Converter:
+class ExprConverter:
     def __init__(self, e: pt.Expr):
         self.subroutine_list: list[pt.SubroutineDefinition] = []
+
         self.body = self.expr_to_py(e)
 
         self.subroutines = {
-            subr.name(): Converter(subr.declaration) for subr in self.subroutine_list
+            subr.name(): ExprConverter(subr.declaration) for subr in self.subroutine_list
         }
 
     def __str__(self) -> str:
@@ -35,7 +37,7 @@ class Converter:
         py = ""
         match e:
             case pt.SubroutineDeclaration():
-                return f"""def {e.subroutine.name()}({",".join(e.subroutine.arguments())}):\n\t{self.expr_to_py(e.body)}"""
+                return f"""def {e.subroutine.name()}({",".join(e.subroutine.arguments())}):\n{self.expr_to_py(e.body, indent+1)}"""
             case pt.LeafExpr():
                 match e:
                     case pt.Int():
@@ -45,7 +47,11 @@ class Converter:
                     case pt.TxnExpr():
                         py = f"{str(e.op)}[{e.field.name}]"
                     case pt.TxnaExpr():
-                        py = f"{str(e.dynamicOp)}[{e.field.name}][{e.index}]"
+                        idx = str(e.index)
+                        if type(e.index) is not int:
+                            idx = self.expr_to_py(e.index)
+
+                        py = f"{str(e.dynamicOp)}[{e.field.name}][{idx}]"
                     case pt.EnumInt():
                         py = e.name
                     case pt.Global():
@@ -58,19 +64,24 @@ class Converter:
                 py = f"{self.expr_to_py(e.argLeft)} {self.op_to_str(e.op)} {self.expr_to_py(e.argRight)}"
 
             case pt.NaryExpr():
-                py = f" {self.op_to_str(e.op)} ".join(
+                py = f"{self.op_to_str(e.op)} ".join(
                     [self.expr_to_py(arg) for arg in e.args]
                 )
 
             case pt.UnaryExpr():
                 # unary exprs should be available as standalone methods
-                py = f"{self.op_to_str(e.op)}({self.expr_to_py(e.arg)})"
+
+                py = f"pt.{self.op_to_str(e.op)}({self.expr_to_py(e.arg)})"
+
 
             case pt.Seq():
-                py = "\n".join([self.expr_to_py(arg) for arg in e.args])
+                # if len(e.args)>1:
+                #     return "\n".join([self.expr_to_py(arg, indent) for arg in e.args[:-1]])+f"\n\treturn {self.expr_to_py(e.args[-1], indent)}"
+                # else:
+                    return "\n".join([self.expr_to_py(arg, indent) for arg in e.args])
 
             case pt.Assert():
-                py = "\n".join([f"assert {self.expr_to_py(c)}" for c in e.cond])
+                py = "\n".join([f"assert {self.expr_to_py(c, indent)}" for c in e.cond])
 
             case pt.ScratchStore():
                 py = f"{e.slot} = {self.expr_to_py(e.value)}"
@@ -79,16 +90,11 @@ class Converter:
                 py = self.expr_to_py(e.slot)
 
             case pt.For():
-                start = self.expr_to_py(e.start)
-                cond = self.expr_to_py(e.cond)
-                step = self.expr_to_py(e.step)
-                do = self.expr_to_py(e.doBlock)
-                py = f"""
-    {start}
-    while {cond}:
-        {do}
-        {step}
-            """
+                start = self.expr_to_py(e.start, indent)
+                cond = self.expr_to_py(e.cond, indent)
+                step = self.expr_to_py(e.step, indent)
+                do = self.expr_to_py(e.doBlock, indent)
+                py = f"""{start}\nwhile {cond}:\n{do}\n\n{step}"""
 
             case pt.Cond():
                 argd = [
@@ -99,7 +105,7 @@ class Converter:
                 py = "\nel".join(argd)
 
             case pt.Return():
-                py = f"return {self.expr_to_py(e.value)}"
+                py = f"{self.expr_to_py(e.value)}"
 
             case pt.SubroutineCall():
                 decl = e.subroutine.get_declaration()
@@ -111,23 +117,23 @@ class Converter:
                 py = str(e.id)
 
             case pt.ScratchStackStore():
-                py = f"{e.slot} = ^^  "
+                py = f"{e.slot} = ^^"
 
             case substr.SuffixExpr():
-                py = f"suffix({self.expr_to_py(e.stringArg)}, {self.expr_to_py(e.startArg)})"
+                py = f"pt.suffix({self.expr_to_py(e.stringArg)}, {self.expr_to_py(e.startArg)})"
 
             case substr.ExtractExpr():
-                py = f"extract({self.expr_to_py(e.stringArg)}, {self.expr_to_py(e.startArg)}, {self.expr_to_py(e.lenArg)})"
+                py = f"pt.extract({self.expr_to_py(e.stringArg)}, {self.expr_to_py(e.startArg)}, {self.expr_to_py(e.lenArg)})"
 
             case ret.ExitProgram():
-                py = "return 0"
+                py = "0"
 
             case itxn.InnerTxnActionExpr():
-                py = f"InnerTxn.{str(e.action.name)}()"
+                py = f"pt.InnerTxn.{str(e.action.name)}()"
 
             case itxn.InnerTxnFieldExpr():
                 py = (
-                    f"InnerTxnField.{str(e.field.arg_name)}({self.expr_to_py(e.value)})"
+                    f"pt.InnerTxnField.{str(e.field.arg_name)}({self.expr_to_py(e.value)})"
                 )
 
             case _:
@@ -194,8 +200,7 @@ while x < 10:
 
 
 for prog in progs:
-    c = Converter(prog[0])
+    c = ExprConverter(prog[0])
     print(c)
-    # print(c.body)
-    # print(prog[1].strip())
+    print(prog[1].strip())
     print("----")
