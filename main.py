@@ -11,6 +11,7 @@ from c2c import approval, clear
 # TODO: instead of returning a string, return the python AST elements
 # TODO: use IR instead of Exprs
 
+
 class ExprConverter:
     def __init__(self, e: pt.Expr):
         self.subroutine_list: list[pt.SubroutineDefinition] = []
@@ -18,7 +19,8 @@ class ExprConverter:
         self.body = self.expr_to_py(e)
 
         self.subroutines = {
-            subr.name(): ExprConverter(subr.declaration) for subr in self.subroutine_list
+            subr.name(): ExprConverter(subr.declaration)
+            for subr in self.subroutine_list
         }
 
     def __str__(self) -> str:
@@ -64,21 +66,18 @@ class ExprConverter:
                 py = f"{self.expr_to_py(e.argLeft)} {self.op_to_str(e.op)} {self.expr_to_py(e.argRight)}"
 
             case pt.NaryExpr():
-                py = f"{self.op_to_str(e.op)} ".join(
+                py = f" {self.op_to_str(e.op)} ".join(
                     [self.expr_to_py(arg) for arg in e.args]
                 )
 
             case pt.UnaryExpr():
-                # unary exprs should be available as standalone methods
-
                 py = f"pt.{self.op_to_str(e.op)}({self.expr_to_py(e.arg)})"
-
 
             case pt.Seq():
                 # if len(e.args)>1:
                 #     return "\n".join([self.expr_to_py(arg, indent) for arg in e.args[:-1]])+f"\n\treturn {self.expr_to_py(e.args[-1], indent)}"
                 # else:
-                    return "\n".join([self.expr_to_py(arg, indent) for arg in e.args])
+                return "\n".join([self.expr_to_py(arg, indent) for arg in e.args])
 
             case pt.Assert():
                 py = "\n".join([f"assert {self.expr_to_py(c, indent)}" for c in e.cond])
@@ -92,9 +91,9 @@ class ExprConverter:
             case pt.For():
                 start = self.expr_to_py(e.start, indent)
                 cond = self.expr_to_py(e.cond, indent)
-                step = self.expr_to_py(e.step, indent)
-                do = self.expr_to_py(e.doBlock, indent)
-                py = f"""{start}\nwhile {cond}:\n{do}\n\n{step}"""
+                step = self.expr_to_py(e.step, indent + 1)
+                do = self.expr_to_py(e.doBlock, indent + 1)
+                py = f"""{start}\nwhile {cond}:\n{do}\n{step}"""
 
             case pt.Cond():
                 argd = [
@@ -114,7 +113,7 @@ class ExprConverter:
                 py = f"""{decl.subroutine.name()}({",".join(args)})"""
 
             case pt.ScratchSlot():
-                py = str(e.id)
+                py = f"slot#{str(e.id)}"
 
             case pt.ScratchStackStore():
                 py = f"{e.slot} = ^^"
@@ -132,9 +131,7 @@ class ExprConverter:
                 py = f"pt.InnerTxn.{str(e.action.name)}()"
 
             case itxn.InnerTxnFieldExpr():
-                py = (
-                    f"pt.InnerTxnField.{str(e.field.arg_name)}({self.expr_to_py(e.value)})"
-                )
+                py = f"pt.InnerTxnField.{str(e.field.arg_name)}({self.expr_to_py(e.value)})"
 
             case _:
                 print(e.__class__)
