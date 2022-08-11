@@ -2,7 +2,7 @@ import pyteal as pt
 import pyteal.ast.substring as substr
 import pyteal.ast.return_ as ret
 import pyteal.ast.itxn as itxn
-from c2c import approval, clear
+from c2c import approval
 
 # Dumb program to write out python given a pyteal expression
 # might be helpful later going from python => pyteal
@@ -10,7 +10,6 @@ from c2c import approval, clear
 # TODO: figure out how to get variable names
 # TODO: instead of returning a string, return the python AST elements
 # TODO: use IR instead of Exprs
-
 
 class ExprConverter:
     def __init__(self, e: pt.Expr):
@@ -60,7 +59,7 @@ class ExprConverter:
                         py = e.field.name
                     case pt.MethodSignature():
                         py = f"""method_signature("{e.methodName}")"""
-                return py
+                #return py
 
             case pt.BinaryExpr():
                 py = f"{self.expr_to_py(e.argLeft)} {self.op_to_str(e.op)} {self.expr_to_py(e.argRight)}"
